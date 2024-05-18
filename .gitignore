@@ -1,1 +1,6 @@
 .env
+logs/
+plugins/
+dags/__pycache__/
+Dockerfile
+requirements.txt
