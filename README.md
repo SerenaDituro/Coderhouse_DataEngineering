@@ -8,7 +8,7 @@
 	 
 
 	Para instalar las dependencias requeridas:
-		> pip install -r requirements.txt
+	    > pip install -r requirements.txt
 
 	Para ejecutar Docker:
 	    > docker-compose up
