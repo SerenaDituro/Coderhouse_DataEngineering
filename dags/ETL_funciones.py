@@ -24,21 +24,28 @@ def download_data(api_url,params):
                     print(f"{code}\n{message}\n{status}\n")
                 return None
             else:
-                print("Los datos se han extraído correctamente!")
+                print("Extracción de datos completada!")
                 return data
         except json.JSONDecodeError as e:
-            print(f"JSONDecodeError: {e}")
+            print(f"Error al extraer los datos!\nJSONDecodeError: {e}")
     else:
-        print(f"Request failed with status code: {response.status_code}")
+        print(f"Error al extraer los datos!\nRequest failed with status code: {response.status_code}")
         return None
 
 def extract_data(**kwargs):
+    execution_date = kwargs['execution_date']
+    if execution_date.weekday() >= 5:
+        print("No hay datos para agregar porque es fin de semana... ")
+        return
+    else:
+        execution_date = execution_date.strftime('%Y-%m-%d')
+    
     base_url = 'https://api.twelvedata.com' 
     endpoint = '/time_series' 
     params = {
         'symbol': 'AAPL,AMZN,TSLA,META,MSFT,GOOG,SPY,QQQ',
         'interval': '1day',
-        'start_date': '2024-01-01',
+        'start_date': execution_date, # obtengo los datos del día de ejecución
         'apikey': os.getenv('APIKEY')
     }
 
@@ -51,9 +58,13 @@ def extract_data(**kwargs):
         # para evitar la llamada entre funciones y garantizar que cada tarea del DAG sea independiente
 
 def transform_data(**kwargs):
+    if kwargs['execution_date'].weekday() >= 5:
+        print("No hay datos para agregar porque es fin de semana... ")
+        return
+    
     data = kwargs['ti'].xcom_pull(key='extracted_data', task_ids='extraccion_datos')
     if not data:
-        print("Error al extraer datos!")
+        print("Error al extraer los datos!\n")
         return None
     
     try:
@@ -82,23 +93,23 @@ def transform_data(**kwargs):
                 'mic_code': value['meta']['mic_code'],
                 'type': value['meta']['type'],
                 **val,
-                'datetime_load': pd.Timestamp.now(tz='America/Argentina/Buenos_Aires').strftime('%Y-%m-%d %H:%M:%S'),#%z
+                'datetime_load': pd.Timestamp.now(tz='America/Argentina/Buenos_Aires').strftime('%Y-%m-%d %H:%M')
             }
             for key, value in data.items() 
                 for val in value['values']
         ])
         df = df.rename(columns={'open': 'open_value', 'high': 'high_value', 'low': 'low_value', 'close': 'close_value'})
-        print(f"Se ha realizado la transformación de los datos de manera exitosa!\n")
+        print(f"Tansformación de datos completada!\n")
         
         # Se convierte el DataFrame a JSON
         data_json = df.to_json(orient='records')        
         kwargs['ti'].xcom_push(key='transformed_data', value=data_json)
         return data_json
     except Exception as e:
-        print(f"No es posible realizar la transformación de los datos\nError: {e}\n")
+        print(f"Error al transformar los datos!\nError: {e}\n")
         return None
 
-def create_table(conn,table_name='serenadituro_coderhouse.finance'):
+def create_table(conn,table_name='serenadituro_coderhouse.finances'):
     try:
         with conn.cursor() as cur:
             create_table = f''' CREATE TABLE IF NOT EXISTS {table_name} (
@@ -119,10 +130,9 @@ def create_table(conn,table_name='serenadituro_coderhouse.finance'):
                     )'''
             cur.execute(create_table)
             conn.commit()
-            print(f'Operación realizada con éxito!\n')
             return table_name
     except Exception as e:
-        print(f'Error al crear la tabla\n{e}\n')
+        print(f'Error al crear tabla en la Base de Datos!\n{e}\n')
         return None
 
 def connect_redshift():
@@ -134,14 +144,18 @@ def connect_redshift():
             password = os.getenv('AR_PASSWORD'),
             port = os.getenv('AR_PORT')
         )
-        print("Se ha establecido la conexión con Amazon Redshift de manera exitosa!\n")
+        print("Conexión con Amazon Redshift realizada!\n")
         table_name = create_table(conn)
         return conn, table_name
     except Exception as e:
-        print(f"No es posible establecer la conexión con Amazon Redshift\nError: {e}\n")
+        print(f"Error al establecer la conexión con Amazon Redshift\nError: {e}\n")
         return None
 
 def load_data(**kwargs):
+    if kwargs['execution_date'].weekday() >= 5:
+        print("No hay datos para agregar porque es fin de semana... ")
+        return
+    
     data_json = kwargs['ti'].xcom_pull(task_ids='transformacion_datos')
     if data_json:
         try:
@@ -162,16 +176,18 @@ def load_data(**kwargs):
                                 insert_data = f"INSERT INTO {table_name} ({', '.join(df.columns)}) VALUES ({placeholder})"
                                 cur.execute(insert_data, df.values.tolist()[index])
                                 print('Dato insertado...\n')
-                            index += 1
+                            else:
+                                print('Dato ya existente...\n')
+                            index += 1                     
                     conn.commit()
-                    print(f'Los datos se han insertado correctamente!\n')
+                    print(f'Carga de datos completada!\n')
                     conn.close()
                     print(f'Conexión finalizada!\n')
                 except Exception as e:
                     print(f'Error al insertar los datos\n{e}\n')
             else:
-                print('Error: no se pudo establecer la conexión con Redshift\n')
+                print('Error al establecer la conexión con Amazon Redshift!\n')
         except ValueError as ve:
-            print(f"Error al convertir JSON a DataFrame\n{ve}\n")
+            print(f"Error al convertir JSON a DataFrame!\n{ve}\n")
     else:
-        print('Error en la transformación de datos!\n')
+        print('Error al transformar los datos!\n')

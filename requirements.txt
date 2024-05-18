@@ -1,0 +1,6 @@
+apache-airflow
+psycopg2 
+python-dotenv
+pandas 
+requests
+datetime

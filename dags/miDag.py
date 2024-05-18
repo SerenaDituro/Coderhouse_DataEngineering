@@ -1,22 +1,21 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from script import extract_data, transform_data, load_data
+from ETL_funciones import extract_data, transform_data, load_data
 
 # Definición de los argumentos del DAG
 default_args = {
     'owner': 'Serena Dituro',
-    'start_date': datetime(2024, 5, 11),
+    'start_date': datetime(2024, 1, 1),
     'retries':5,
-    'retry_delay': timedelta(minutes=5),
-    'execution_timeout': timedelta(minutes=10)
+    'retry_delay': timedelta(minutes=5)
 }
 
 # Definición el DAG
 miDag = DAG(
-    dag_id='miDag',
+    dag_id='DAG_ETL_FINANCES',
     default_args=default_args,
-    description='DAG que corre Tasks con Python Operators dentro un Docker container',
+    description='DAG diario que corre Tasks basados en un ETL con Python Operators dentro un Docker container',
     schedule_interval='@daily',  # Corre de forma diaria
     catchup=False
 )
@@ -26,6 +25,7 @@ miDag = DAG(
 task_1 = PythonOperator(
     task_id='extraccion_datos',
     python_callable=extract_data,
+    #op_args=["{{ ds }}"],
     provide_context=True,
     dag=miDag,
 )
@@ -46,5 +46,5 @@ task_3 = PythonOperator(
     dag=miDag,
 )
 
-# Definición de orden de tareas
+# Definición del orden de tareas
 task_1 >> task_2 >> task_3
