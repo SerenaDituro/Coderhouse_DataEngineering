@@ -10,20 +10,6 @@
 
   
 
-**2.** Desde una terminal de Visual Studio Code, ejecutar los siguientes comandos:
+**2.** Desde una terminal de Visual Studio Code, ejecutar el siguiente comando:
 
- - Para crear un Entorno Virtual:
-
-		> python -m venv venv
-
- - Para activar el Entorno Virtual:
-
-		> venv\Scripts\activate
-  
- - Para instalar las dependencias requeridas:
-
-		> pip install -r requirements.txt
-
- - Para ejecutar Docker:
-
-		> docker-compose up
+	    > docker-compose up
