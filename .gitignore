@@ -2,4 +2,3 @@
 logs/
 plugins/
 dags/__pycache__/
-venv/
