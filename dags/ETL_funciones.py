@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 import pandas as pd
 import psycopg2
-from datetime import datetime
+from datetime import datetime,timedelta
 
 load_dotenv()
 
@@ -18,6 +18,7 @@ def download_data(api_url,params):
             for key, value in data.items():
                 if isinstance(value, dict) and 'code' in value and value['code'] in [400, 401, 403, 404, 414, 429, 500]:
                     errors.append((value['code'], value['message'], value['status']))
+            
             if errors:
                 for error in errors:
                     code, message, status = error
@@ -26,20 +27,23 @@ def download_data(api_url,params):
             else:
                 print("Extracción de datos completada!")
                 return data
-        except json.JSONDecodeError as e:
-            print(f"Error al extraer los datos!\nJSONDecodeError: {e}")
+        except Exception as e:
+            print(f"Error al extraer los datos!\nError: {e}")
+            return None
     else:
         print(f"Error al extraer los datos!\nRequest failed with status code: {response.status_code}")
         return None
 
 def extract_data(**kwargs):
-    execution_date = kwargs['execution_date']
+    execution_date = kwargs['execution_date'] - timedelta(hours=3) # horario de Buenos Aires/Argentina
+    print(execution_date)
     if execution_date.weekday() >= 5:
         print("No hay datos para agregar porque es fin de semana... ")
         return
     else:
-        execution_date = execution_date.strftime('%Y-%m-%d')
-    
+        execution_date = execution_date.strftime("%Y-%m-%d")
+        print(execution_date)
+
     base_url = 'https://api.twelvedata.com' 
     endpoint = '/time_series' 
     params = {
@@ -82,7 +86,7 @@ def transform_data(**kwargs):
                     val['close'] = round(float(val['close']), 3)
                 if 'volume' in val:
                     val['volume'] = int(val['volume'])
-        
+
         # Creación del dataframe a partir de una lista de compresión
         df = pd.DataFrame([
             {
@@ -100,7 +104,7 @@ def transform_data(**kwargs):
         ])
         df = df.rename(columns={'open': 'open_value', 'high': 'high_value', 'low': 'low_value', 'close': 'close_value'})
         print(f"Tansformación de datos completada!\n")
-        
+
         # Se convierte el DataFrame a JSON
         data_json = df.to_json(orient='records')        
         kwargs['ti'].xcom_push(key='transformed_data', value=data_json)

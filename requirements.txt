@@ -1,0 +1,6 @@
+apache-airflow==2.8.4
+psycopg2 
+python-dotenv
+pandas 
+requests
+datetime

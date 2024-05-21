@@ -6,7 +6,7 @@ from ETL_funciones import extract_data, transform_data, load_data
 # Definición de los argumentos del DAG
 default_args = {
     'owner': 'Serena Dituro',
-    'start_date': datetime(2024, 1, 1),
+    'start_date': datetime(2024, 5, 20),
     'retries':5,
     'retry_delay': timedelta(minutes=5)
 }

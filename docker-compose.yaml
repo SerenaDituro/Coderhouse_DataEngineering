@@ -93,9 +93,26 @@ services:
       retries: 5
     restart: always
 
+  # airflow-webserver:
+  #   <<: *airflow-common
+  #   command: webserver
+  #   ports:
+  #     - 8080:8080
+  #   healthcheck:
+  #     test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 5
+  #   restart: always
+
   airflow-webserver:
     <<: *airflow-common
-    command: webserver
+    command: >
+      bash -c "
+        airflow db init &&
+        airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin &&
+        airflow webserver
+      "
     ports:
       - 8080:8080
     healthcheck:
