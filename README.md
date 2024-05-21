@@ -12,8 +12,8 @@
 
 **3.** Desde el navegador:
 
-		- Copiar el siguiente link: http://localhost:8080
+	- Copiar el siguiente link: http://localhost:8080
 
-		- Usuario: admin
+	- Usuario: admin
 
-		- Contraseña: admin
+	- Contraseña: admin
