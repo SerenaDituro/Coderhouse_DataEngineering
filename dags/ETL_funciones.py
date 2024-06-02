@@ -5,8 +5,20 @@ import os
 import pandas as pd
 import psycopg2
 from datetime import datetime,timedelta
+import smtplib  # para el envío del email
 
-load_dotenv()
+load_dotenv() 
+
+def check_execution_date(execution_date):
+    execution_date = datetime.fromisoformat(execution_date) # paso de str a datetime
+    if execution_date.weekday() >= 5:
+        print("No hay datos para extraer porque el mercado no opera el fin de semana... ")
+        return None
+    else:
+        execution_date = execution_date - timedelta(hours=3) # horario de Buenos Aires/Argentina
+        execution_date = execution_date.strftime("%Y-%m-%d")
+        print(execution_date)
+        return execution_date
 
 def download_data(api_url,params):
     response = requests.get(api_url,params=params)
@@ -34,39 +46,34 @@ def download_data(api_url,params):
         print(f"Error al extraer los datos!\nRequest failed with status code: {response.status_code}")
         return None
 
-def extract_data(**kwargs):
-    execution_date = kwargs['execution_date'] - timedelta(hours=3) # horario de Buenos Aires/Argentina
-    print(execution_date)
-    if execution_date.weekday() >= 5:
-        print("No hay datos para agregar porque es fin de semana... ")
+def extract_data(ti,execution_date):
+    # chequeo si no es fin de semana para extraer los datos
+    exec_date = check_execution_date(execution_date)
+    if exec_date is None:
         return
-    else:
-        execution_date = execution_date.strftime("%Y-%m-%d")
-        print(execution_date)
 
     base_url = 'https://api.twelvedata.com' 
     endpoint = '/time_series' 
     params = {
         'symbol': 'AAPL,AMZN,TSLA,META,MSFT,GOOG,SPY,QQQ',
         'interval': '1day',
-        'start_date': execution_date, # obtengo los datos del día de ejecución
+        'start_date': exec_date, # obtengo los datos del día de ejecución
         'apikey': os.getenv('APIKEY')
     }
 
     api_url = base_url + endpoint
 
     data = download_data(api_url, params)
-    
+
     if data:
-        kwargs['ti'].xcom_push(key='extracted_data', value=data) 
+        ti.xcom_push(key='extracted_data', value=data) 
         # para evitar la llamada entre funciones y garantizar que cada tarea del DAG sea independiente
 
-def transform_data(**kwargs):
-    if kwargs['execution_date'].weekday() >= 5:
-        print("No hay datos para agregar porque es fin de semana... ")
+def transform_data(ti,execution_date):
+    if check_execution_date(execution_date) is None:
         return
     
-    data = kwargs['ti'].xcom_pull(key='extracted_data', task_ids='extraccion_datos')
+    data = ti.xcom_pull(key='extracted_data', task_ids='extraccion_datos')
     if not data:
         print("Error al extraer los datos!\n")
         return None
@@ -105,10 +112,9 @@ def transform_data(**kwargs):
         df = df.rename(columns={'open': 'open_value', 'high': 'high_value', 'low': 'low_value', 'close': 'close_value'})
         print(f"Tansformación de datos completada!\n")
 
-        # Se convierte el DataFrame a JSON
-        data_json = df.to_json(orient='records')        
-        kwargs['ti'].xcom_push(key='transformed_data', value=data_json)
-        return data_json
+        # Conversión del DataFrame a JSON
+        transformed_data = df.to_json(orient='records')        
+        return transformed_data
     except Exception as e:
         print(f"Error al transformar los datos!\nError: {e}\n")
         return None
@@ -155,15 +161,18 @@ def connect_redshift():
         print(f"Error al establecer la conexión con Amazon Redshift\nError: {e}\n")
         return None
 
-def load_data(**kwargs):
-    if kwargs['execution_date'].weekday() >= 5:
-        print("No hay datos para agregar porque es fin de semana... ")
+def load_data(ti,execution_date):
+    # execution_date = datetime.fromisoformat(execution_date)
+    # if execution_date.weekday() >= 5:
+    #     print("No hay datos para extraer porque el mercado no opera el fin de semana... ")
+    #     return
+    if check_execution_date(execution_date) is None:
         return
     
-    data_json = kwargs['ti'].xcom_pull(task_ids='transformacion_datos')
-    if data_json:
+    data_str = ti.xcom_pull(task_ids='transformacion_datos')
+    if data_str:
         try:
-            df = pd.read_json(data_json)
+            df = pd.read_json(data_str)
             conn, table_name = connect_redshift()
             if conn and table_name:
                 try: 
@@ -195,3 +204,75 @@ def load_data(**kwargs):
             print(f"Error al convertir JSON a DataFrame!\n{ve}\n")
     else:
         print('Error al transformar los datos!\n')
+
+# Se envía una alerta cada vez que el volumen actual de un ETL sea levemente menor al volumen promedio 
+# obtenido a partir de los últimos 30 días
+def check_and_alert(ti, execution_date):
+    if check_execution_date(execution_date) is None:
+        return
+
+    threshold = 0.98 # umbral definido por defecto
+
+    data_str = ti.xcom_pull(task_ids='transformacion_datos')
+    data_json = json.loads(data_str)
+    if data_json:
+        df = pd.DataFrame(data_json)
+        conn, table_name = connect_redshift()
+        if conn and table_name:
+            try: 
+                with conn.cursor() as cur:
+                    last_30_days = datetime.now() - timedelta(days=30)
+                    select_data = f'''SELECT symbol, AVG(volume) AS avg_volume 
+                    FROM {table_name} WHERE datetime >= %s
+                    GROUP BY symbol;'''
+                    cur.execute(select_data,(last_30_days,))
+                    results = cur.fetchall()  
+
+                    # para obtener la fecha
+                    df['datetime'] = df['datetime'] / 1000 # al valor en milisegundos lo paso a segundos
+                    df['datetime'] = pd.to_datetime(df['datetime'], unit='s') # lo paso a objeto datetime
+                    df['datetime_str'] = df['datetime'].dt.strftime('%Y-%m-%d') # obtengo el formato yy-mm-dd                 
+
+                    alerts = []
+                    for symbol,avg_volume in results:
+                        current_volume = df[df['symbol'] == symbol]['volume'].values[0]
+                        if current_volume < avg_volume * threshold:
+                            current_day = df[df['symbol'] == symbol]['datetime_str'].values[0] 
+                            alert = f'{current_day}: El volumen actual de {symbol} es menor que el volumen promedio ({avg_volume}) calculado en función de los últimos 30 días.'
+                            print(alert)
+                            alerts.append(alert)
+
+                    if alerts:
+                        subject = 'Alertas por volumen de ETFs'
+                        body = '\n'.join(alerts)
+                        send_email_alert(subject, body)
+                    else:
+                        print("Sin alertas relativas al volumen de los ETLs...")
+                conn.close()
+            except Exception as e:
+                print(f'Error al obtener datos\n{e}\n')
+        else:
+            print('Error al establecer la conexión con Amazon Redshift!\n')
+    else:
+        print('Error al transformar los datos!\n')
+
+def send_email_alert(subject, body):
+    SMTP_SERVER = os.getenv('SMTP_SERVER')
+    SMTP_PORT = os.getenv('SMTP_PORT')
+    EMAIL_ADDRESS_FROM = os.getenv('EMAIL_ADDRESS_FROM')
+    EMAIL_PASSWORD_FROM = os.getenv('EMAIL_PASSWORD')
+    EMAIL_ADDRESS_TO = os.getenv('EMAIL_ADDRESS_TO')
+
+    try:
+        # Conexión al servidor del correo electrónico
+        x = smtplib.SMTP(SMTP_SERVER,SMTP_PORT)
+        x.starttls()
+        x.login(EMAIL_ADDRESS_FROM,EMAIL_PASSWORD_FROM)
+        # Envío del email
+        message = f'Subject: { subject }\n\n{ body }'
+        message = message.encode('utf-8') # codifico el mensaje
+        x.sendmail(EMAIL_ADDRESS_FROM,EMAIL_ADDRESS_TO,message)
+        x.quit()
+        print('Email envíado de manera exitosa!')
+    except Exception as e:
+        print(f'Error al envíar email!\nError: {e}')

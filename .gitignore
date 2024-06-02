@@ -1,4 +1,5 @@
 .env
+requirements.txt
 logs/
 plugins/
 dags/__pycache__/
