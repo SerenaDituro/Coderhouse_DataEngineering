@@ -1,20 +1,49 @@
-# Usa la imagen oficial de Airflow como base
-FROM apache/airflow:2.2.4-python3.8
+# FROM apache/airflow:2.2.4-python3.8
+# Parto de la imagen oficial de Python
+FROM python:3.9-slim
 
-# Configura el directorio de trabajo
-WORKDIR /opt/airflow
+ENV AIRFLOW_HOME=/opt/airflow
 
-# Copia el archivo requirements.txt al contenedor
-COPY requirements.txt .
+# Instalación de dependencias
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    default-libmysqlclient-dev \
+    libssl-dev \
+    libffi-dev \
+    libblas-dev \
+    liblapack-dev \
+    libpq-dev \
+    git \
+    ssh \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Instala las dependencias adicionales especificadas en requirements.txt
+RUN pip install --upgrade pip
+
+COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar los archivos de los DAGs al contenedor
-COPY dags/ /opt/airflow/dags/
+# Configuro el directorio de trabajo
+# WORKDIR $AIRFLOW_HOME
 
-# Establece el entrypoint para los comandos de Airflow
-ENTRYPOINT ["tini", "--", "airflow"]
+# Defino las variables de entorno para el usuario y la contraseña
+# ENV AIRFLOW_UID=50000
+# ENV AIRFLOW_GID=0
+
+# ENV AIRFLOW__WEBSERVER__AUTHENTICATE=True
+# ENV AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.contrib.auth.backends.password_auth
+# ENV AIRFLOW__WEBSERVER__USERNAME=airflow
+# ENV AIRFLOW__WEBSERVER__PASSWORD=airflow
+
+# ENV _AIRFLOW_WWW_USER_USERNAME=airflow
+# ENV _AIRFLOW_WWW_USER_PASSWORD=airflow
+
+# Copio los archivos DAG al directorio de Airflow
+COPY ./dags/ $AIRFLOW_HOME/dags/
+
+# Inicializo la base de datos de Airflow y ejecuto el scheduler y el web server
+CMD ["bash", "-c", "airflow webserver & airflow scheduler"]
+
 
 # # Imagen base de Python
 # FROM python:3.9-slim

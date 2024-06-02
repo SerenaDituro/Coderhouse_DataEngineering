@@ -4,11 +4,9 @@
 
 **1.** Abrir la aplicación de escritorio **Docker Desktop**
 
-**2.** Desde una terminal de Visual Studio Code, ejecutar los siguiente comandos:
+**2.** Desde una terminal de Visual Studio Code, ejecutar el siguiente comando:
 
-	    > docker-compose build
-
-	    > docker-compose up -d
+	    > docker-compose up --build
 
 **3.** Desde el navegador:
 

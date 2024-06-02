@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
-from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
+from airflow import DAG # type: ignore
+from airflow.operators.python_operator import PythonOperator # type: ignore
 from ETL_funciones import extract_data, transform_data, load_data, check_and_alert, send_email_alert
 
 # Definición de los argumentos del DAG
@@ -16,7 +16,7 @@ miDag = DAG(
     dag_id='DAG_ETL_FINANCES',
     default_args=default_args,
     description='''DAG diario que corre Tasks basados en un ETL con Python Operators dentro un Docker container. 
-    Permite el mecanismo de Backfill y envía alertas por Email en caso de que el volumen actual de un ETL sea inferior 
+    Permite el mecanismo de Backfill y envía alertas por Email en caso de que el volumen actual de un ETL sea levemente inferior 
     al volumen promedio (últimos 30 días)''',
     schedule_interval='@daily',  # Corre de forma diaria
     catchup=False
