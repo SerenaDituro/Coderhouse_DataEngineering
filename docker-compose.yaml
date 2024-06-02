@@ -1,6 +1,10 @@
 version: '3'
 x-airflow-common:
   &airflow-common
+  build:
+      context: .
+      dockerfile: Dockerfile
+  image: dituro_proyecto_final
   env_file:
     - .env
   environment:
@@ -13,7 +17,6 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
     _PIP_ADDITIONAL_REQUIREMENTS: 'python-dotenv'
-    #USERNAME: airflow
   volumes:
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
@@ -22,7 +25,6 @@ x-airflow-common:
       condition: service_healthy
 
 services:
-  # Definición del servicio postgres
   postgres:
     image: postgres:13
     env_file:
@@ -43,10 +45,6 @@ services:
 
   airflow-webserver:
     <<: *airflow-common
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: dituro_proyecto_final
     command: >
       bash -c "
         airflow db migrate &&
@@ -63,10 +61,6 @@ services:
 
   airflow-scheduler:
     <<: *airflow-common
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: dituro_proyecto_final
     command: >
       bash -c "
         airflow scheduler

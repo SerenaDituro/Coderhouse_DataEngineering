@@ -6,7 +6,7 @@
 
 **2.** Desde una terminal de Visual Studio Code, ejecutar el siguiente comando:
 
-	    > docker-compose up --build
+		> docker-compose up --build
 
 **3.** Desde el navegador:
 
