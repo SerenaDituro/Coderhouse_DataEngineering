@@ -11,11 +11,13 @@ load_dotenv()
 
 def check_execution_date(execution_date):
     execution_date = datetime.fromisoformat(execution_date) # paso de str a datetime
+    print(execution_date)
     if execution_date.weekday() >= 5:
         print("No hay datos para extraer porque el mercado no opera el fin de semana... ")
         return None
     else:
         execution_date = execution_date - timedelta(hours=3) # horario de Buenos Aires/Argentina
+        print(execution_date)
         execution_date = execution_date.strftime("%Y-%m-%d")
         print(execution_date)
         return execution_date
@@ -34,7 +36,7 @@ def download_data(api_url,params):
             if errors:
                 for error in errors:
                     code, message, status = error
-                    print(f"{code}\n{message}\n{status}\n")
+                    print(f"{status}-{code}:{message}\n")
                 return None
             else:
                 print("Extracción de datos completada!")
@@ -57,17 +59,18 @@ def extract_data(ti,execution_date):
     params = {
         'symbol': 'AAPL,AMZN,TSLA,META,MSFT,GOOG,SPY,QQQ',
         'interval': '1day',
-        'start_date': exec_date, # obtengo los datos del día de ejecución
+        'start_date': exec_date, 
         'apikey': os.getenv('APIKEY')
     }
 
     api_url = base_url + endpoint
 
     data = download_data(api_url, params)
-
+    
     if data:
-        ti.xcom_push(key='extracted_data', value=data) 
-        # para evitar la llamada entre funciones y garantizar que cada tarea del DAG sea independiente
+        ti.xcom_push(key='extracted_data', value=data) # para evitar la llamada entre funciones y garantizar que cada tarea del DAG sea independiente
+    else:
+        print("No hay datos disponibles: Recordar que el mercado empieza a operar a partir de las 11 AM...\n")
 
 def transform_data(ti,execution_date):
     if check_execution_date(execution_date) is None:
@@ -75,7 +78,7 @@ def transform_data(ti,execution_date):
     
     data = ti.xcom_pull(key='extracted_data', task_ids='extraccion_datos')
     if not data:
-        print("Error al extraer los datos!\n")
+        print("No hay datos disponibles: Recordar que el mercado empieza a operar a partir de las 11 AM...\n")
         return None
     
     try:
@@ -162,10 +165,6 @@ def connect_redshift():
         return None
 
 def load_data(ti,execution_date):
-    # execution_date = datetime.fromisoformat(execution_date)
-    # if execution_date.weekday() >= 5:
-    #     print("No hay datos para extraer porque el mercado no opera el fin de semana... ")
-    #     return
     if check_execution_date(execution_date) is None:
         return
     
@@ -211,7 +210,7 @@ def check_and_alert(ti, execution_date):
     if check_execution_date(execution_date) is None:
         return
 
-    threshold = 0.98 # umbral definido por defecto
+    threshold = 0.85 # umbral definido por defecto
 
     data_str = ti.xcom_pull(task_ids='transformacion_datos')
     data_json = json.loads(data_str)
@@ -238,7 +237,7 @@ def check_and_alert(ti, execution_date):
                         current_volume = df[df['symbol'] == symbol]['volume'].values[0]
                         if current_volume < avg_volume * threshold:
                             current_day = df[df['symbol'] == symbol]['datetime_str'].values[0] 
-                            alert = f'{current_day}: El volumen actual de {symbol} es menor que el volumen promedio ({avg_volume}) calculado en función de los últimos 30 días.'
+                            alert = f'{current_day}: El volumen actual de {symbol} ({current_volume}) es menor que el volumen promedio ({avg_volume}) calculado en función de los últimos 30 días.'
                             print(alert)
                             alerts.append(alert)
 
@@ -247,7 +246,7 @@ def check_and_alert(ti, execution_date):
                         body = '\n'.join(alerts)
                         send_email_alert(subject, body)
                     else:
-                        print("Sin alertas relativas al volumen de los ETLs...")
+                        print("Sin alertas relativas al volumen de los ETFs...")
                 conn.close()
             except Exception as e:
                 print(f'Error al obtener datos\n{e}\n')
@@ -257,13 +256,13 @@ def check_and_alert(ti, execution_date):
         print('Error al transformar los datos!\n')
 
 def send_email_alert(subject, body):
-    SMTP_SERVER = os.getenv('SMTP_SERVER')
-    SMTP_PORT = os.getenv('SMTP_PORT')
-    EMAIL_ADDRESS_FROM = os.getenv('EMAIL_ADDRESS_FROM')
-    EMAIL_PASSWORD_FROM = os.getenv('EMAIL_PASSWORD')
-    EMAIL_ADDRESS_TO = os.getenv('EMAIL_ADDRESS_TO')
-
     try:
+        SMTP_SERVER = os.getenv('SMTP_SERVER')
+        SMTP_PORT = os.getenv('SMTP_PORT')
+        EMAIL_ADDRESS_FROM = os.getenv('EMAIL_ADDRESS_FROM')
+        EMAIL_PASSWORD_FROM = os.getenv('EMAIL_PASSWORD')
+        EMAIL_ADDRESS_TO = os.getenv('EMAIL_ADDRESS_TO')
+    
         # Conexión al servidor del correo electrónico
         x = smtplib.SMTP(SMTP_SERVER,SMTP_PORT)
         x.starttls()
