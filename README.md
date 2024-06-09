@@ -7,7 +7,7 @@
 
 **2.** Desde Visual Studio Code:
 
-**2.1.** Agregar el archivo **.env** con las variables de entorno utilizadas en el código*
+**2.1.** Agregar el archivo **.env** con las variables de entorno utilizadas en el código
 
 **2.2.** Desde una terminal, ejecutar los siguiente comandos:
 
