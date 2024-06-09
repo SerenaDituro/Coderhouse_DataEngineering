@@ -29,7 +29,7 @@ WORKDIR $AIRFLOW_HOME
 COPY ./dags/ $AIRFLOW_HOME/dags/
 
 # Inicializo la base de datos de Airflow y ejecuto el scheduler y el web server
-CMD ["bash", "-c", "airflow webserver & airflow scheduler"]
+CMD ["bash", "-c", "airflow db init && airflow webserver & airflow scheduler"]
 
 
 

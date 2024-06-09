@@ -1,5 +1,5 @@
 
-# ENTREGABLE Nº 3 CODERHOUSE
+# PROYECTO FINAL
 
 ## Para ejecutar el programa, se deberán seguir los siguientes pasos:
 
@@ -9,11 +9,17 @@
 
 **2.1.** Agregar el archivo **.env** adjuntado en la entrega. 
 
-*Recordar definir las variables relativas a la **cuenta de gmail y contraseña remitente**, así como la **cuenta de gmail destinataria** para el correcto envío del correo electrónico.*
+*Recordar definir las variables de entorno utilizadas en el código a partir de un archivo .env*
 
-**2.2.** Desde una terminal, ejecutar el siguiente comando:
+**2.2.** Desde una terminal, ejecutar los siguiente comandos:
 
-> docker-compose up --build 
+> docker-compose build 
+
+> docker-compose run --rm airflow-init
+
+> docker-compose up -d
+
+* Para parar detener los contenedores ejecutar: docker-compose down
 
 **3.** Desde el navegador:
 

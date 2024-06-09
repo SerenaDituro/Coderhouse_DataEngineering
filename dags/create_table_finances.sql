@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS finances (
+CREATE TABLE IF NOT EXISTS {table_name} (
     symbol VARCHAR(10) NOT NULL,
     currency VARCHAR(30) NOT NULL,
     exchange_timezone VARCHAR(50) NOT NULL,

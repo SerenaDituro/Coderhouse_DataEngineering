@@ -12,12 +12,12 @@ load_dotenv()
 def check_execution_date(execution_date):
     execution_date = datetime.fromisoformat(execution_date) # paso de str a datetime
     print(execution_date)
+    execution_date = execution_date - timedelta(hours=3) # horario de Buenos Aires/Argentina
+    print(execution_date)
     if execution_date.weekday() >= 5:
         print("No hay datos para extraer porque el mercado no opera el fin de semana... ")
         return None
     else:
-        execution_date = execution_date - timedelta(hours=3) # horario de Buenos Aires/Argentina
-        print(execution_date)
         execution_date = execution_date.strftime("%Y-%m-%d")
         print(execution_date)
         return execution_date
@@ -122,25 +122,13 @@ def transform_data(ti,execution_date):
         print(f"Error al transformar los datos!\nError: {e}\n")
         return None
 
-def create_table(conn,table_name='serenadituro_coderhouse.finances'):
+def create_table(conn,filename='create_table_finances.sql',table_name='serenadituro_coderhouse.finances'):
     try:
         with conn.cursor() as cur:
-            create_table = f''' CREATE TABLE IF NOT EXISTS {table_name} (
-                        symbol VARCHAR(10) NOT NULL,
-                        currency VARCHAR(30) NOT NULL,
-                        exchange_timezone VARCHAR(50) NOT NULL,
-                        exchange VARCHAR(20) NOT NULL,
-                        mic_code VARCHAR(10) NOT NULL,
-                        type VARCHAR(30) NOT NULL,
-                        datetime DATE NOT NULL,
-                        open_value FLOAT NOT NULL,
-                        high_value FLOAT NOT NULL,
-                        low_value FLOAT NOT NULL,
-                        close_value FLOAT NOT NULL,
-                        volume INT NOT NULL,
-                        datetime_load TIMESTAMP WITH TIME ZONE NOT NULL,
-                        PRIMARY KEY(symbol,datetime)
-                    )'''
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            sql_file_path = os.path.join(current_dir, filename)
+            with open(sql_file_path, 'r') as file:
+                create_table = file.read().format(table_name=table_name)
             cur.execute(create_table)
             conn.commit()
             return table_name
@@ -213,45 +201,48 @@ def check_and_alert(ti, execution_date):
     threshold = 0.85 # umbral definido por defecto
 
     data_str = ti.xcom_pull(task_ids='transformacion_datos')
-    data_json = json.loads(data_str)
-    if data_json:
-        df = pd.DataFrame(data_json)
-        conn, table_name = connect_redshift()
-        if conn and table_name:
-            try: 
-                with conn.cursor() as cur:
-                    last_30_days = datetime.now() - timedelta(days=30)
-                    select_data = f'''SELECT symbol, AVG(volume) AS avg_volume 
-                    FROM {table_name} WHERE datetime >= %s
-                    GROUP BY symbol;'''
-                    cur.execute(select_data,(last_30_days,))
-                    results = cur.fetchall()  
+    if data_str:
+        data_json = json.loads(data_str)
+        if data_json:
+            df = pd.DataFrame(data_json)
+            conn, table_name = connect_redshift()
+            if conn and table_name:
+                try: 
+                    with conn.cursor() as cur:
+                        last_30_days = datetime.now() - timedelta(days=30)
+                        select_data = f'''SELECT symbol, AVG(volume) AS avg_volume 
+                        FROM {table_name} WHERE datetime >= %s
+                        GROUP BY symbol;'''
+                        cur.execute(select_data,(last_30_days,))
+                        results = cur.fetchall()  
 
-                    # para obtener la fecha
-                    df['datetime'] = df['datetime'] / 1000 # al valor en milisegundos lo paso a segundos
-                    df['datetime'] = pd.to_datetime(df['datetime'], unit='s') # lo paso a objeto datetime
-                    df['datetime_str'] = df['datetime'].dt.strftime('%Y-%m-%d') # obtengo el formato yy-mm-dd                 
+                        # para obtener la fecha
+                        df['datetime'] = df['datetime'] / 1000 # al valor en milisegundos lo paso a segundos
+                        df['datetime'] = pd.to_datetime(df['datetime'], unit='s') # lo paso a objeto datetime
+                        df['datetime_str'] = df['datetime'].dt.strftime('%Y-%m-%d') # obtengo el formato yy-mm-dd                 
 
-                    alerts = []
-                    for symbol,avg_volume in results:
-                        current_volume = df[df['symbol'] == symbol]['volume'].values[0]
-                        if current_volume < avg_volume * threshold:
-                            current_day = df[df['symbol'] == symbol]['datetime_str'].values[0] 
-                            alert = f'{current_day}: El volumen actual de {symbol} ({current_volume}) es menor que el volumen promedio ({avg_volume}) calculado en función de los últimos 30 días.'
-                            print(alert)
-                            alerts.append(alert)
+                        alerts = []
+                        for symbol,avg_volume in results:
+                            current_volume = df[df['symbol'] == symbol]['volume'].values[0]
+                            if current_volume < avg_volume * threshold:
+                                current_day = df[df['symbol'] == symbol]['datetime_str'].values[0] 
+                                alert = f'{current_day}: El volumen actual de {symbol} ({current_volume}) es menor que el volumen promedio ({avg_volume}) calculado en función de los últimos 30 días.'
+                                print(alert)
+                                alerts.append(alert)
 
-                    if alerts:
-                        subject = 'Alertas por volumen de ETFs'
-                        body = '\n'.join(alerts)
-                        send_email_alert(subject, body)
-                    else:
-                        print("Sin alertas relativas al volumen de los ETFs...")
-                conn.close()
-            except Exception as e:
-                print(f'Error al obtener datos\n{e}\n')
+                        if alerts:
+                            subject = 'Alertas por volumen de ETFs'
+                            body = '\n'.join(alerts)
+                            send_email_alert(subject, body)
+                        else:
+                            print("Sin alertas relativas al volumen de los ETFs...")
+                    conn.close()
+                except Exception as e:
+                    print(f'Error al obtener datos\n{e}\n')
+            else:
+                print('Error al establecer la conexión con Amazon Redshift!\n')
         else:
-            print('Error al establecer la conexión con Amazon Redshift!\n')
+            print('Error al transformar los datos!\n')
     else:
         print('Error al transformar los datos!\n')
 
