@@ -19,7 +19,7 @@
 
 > docker-compose up -d
 
-* Para parar detener los contenedores ejecutar: docker-compose down
+*Para detener los contenedores ejecutar: docker-compose down*
 
 **3.** Desde el navegador:
 
